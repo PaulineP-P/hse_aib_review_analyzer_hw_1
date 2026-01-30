@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentiment Analysis for Product Reviews</title>
+    <title>Local Review Sentiment Analyzer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
@@ -76,6 +76,8 @@
             border-radius: 10px;
             font-size: 1rem;
             transition: border-color 0.3s;
+            background-color: #f5f5f5;
+            cursor: not-allowed;
         }
         
         input[type="text"]:focus {
@@ -220,6 +222,25 @@
             font-style: italic;
         }
         
+        .info-box {
+            background-color: #e8f4fd;
+            border-left: 4px solid #4b6cb7;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .info-box h4 {
+            color: #182848;
+            margin-bottom: 8px;
+        }
+        
+        .info-box p {
+            color: #333;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -250,16 +271,23 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Review Sentiment Analyzer</h1>
-            <p>Analyze random product reviews using AI sentiment analysis</p>
+            <h1>Local Review Sentiment Analyzer</h1>
+            <p>Analyze product reviews using local keyword-based analysis</p>
         </div>
         
         <div class="content">
+            <div class="info-box">
+                <h4>🎯 About This Application</h4>
+                <p>This tool analyzes product reviews using <strong>local keyword-based sentiment analysis</strong>. 
+                It processes reviews from a TSV file and determines sentiment (positive/negative/neutral) 
+                without requiring external API calls. Perfect for offline use and educational purposes.</p>
+            </div>
+            
             <div class="input-section">
                 <div class="input-group">
-                    <label for="api-token">Hugging Face API Token (Optional for free tier)</label>
-                    <input type="text" id="api-token" placeholder="Enter your Hugging Face token for higher rate limits">
-                    <p class="token-note">If you don't have a token, the app will use the free tier (may have rate limits).</p>
+                    <label for="api-token">Analysis Mode</label>
+                    <input type="text" id="api-token" placeholder="Local keyword analysis - No API required" disabled>
+                    <p class="token-note">Using local keyword-based sentiment analysis. No external API required.</p>
                 </div>
                 
                 <button id="analyze-btn" class="btn">Analyze Random Review</button>
@@ -285,6 +313,12 @@
                     </div>
                 </div>
                 <div class="review-text" id="review-text"></div>
+            </div>
+            
+            <div class="info-box">
+                <h4>🔍 How It Works</h4>
+                <p>1. Loads 500+ reviews from TSV file • 2. Selects random review • 3. Analyzes keywords • 
+                4. Determines sentiment (positive/negative/neutral) • 5. Displays result with confidence score</p>
             </div>
         </div>
     </div>
