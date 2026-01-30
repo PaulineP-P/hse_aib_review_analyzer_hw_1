@@ -24,7 +24,7 @@ async function loadReviews() {
     try {
         statusElement.textContent = 'Loading reviews from file...';
         
-        const response = await fetch('reviews_test.tsv');
+        const response = await fetch('https://raw.githubusercontent.com/PaulineP-P/hse_aib_review_analyzer_hw_1/main/reviews_test.tsv');
         if (!response.ok) {
             throw new Error(`Failed to load TSV file: ${response.status} ${response.statusText}`);
         }
