@@ -18,16 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
     analyzeBtn.addEventListener('click', analyzeRandomReview);
     loadReviews();
     
-    // Устанавливаем ваш ключ DeepSeek по умолчанию (ОПАСНО - ЗАМЕНИТЕ!)
-    // УДАЛИТЕ ЭТУ СТРОКУ после тестирования или используйте переменную
-    // apiTokenInput.value = 'sk-804861ec547d4ec6889da08f726f74a8';
-    
-    // Меняем текст подсказки
+    // Меняем текст для ясности (API больше не нужно)
     const tokenNote = document.querySelector('.token-note');
     if (tokenNote) {
-        tokenNote.textContent = 'Enter your DeepSeek API key (get it at platform.deepseek.com)';
+        tokenNote.textContent = 'API key is not required for local sentiment analysis';
     }
-    apiTokenInput.placeholder = 'Enter your DeepSeek API key here';
+    apiTokenInput.placeholder = 'API key not needed (using local analysis)';
+    apiTokenInput.disabled = true;
+    apiTokenInput.style.backgroundColor = '#f5f5f5';
+    apiTokenInput.style.cursor = 'not-allowed';
 });
 
 // Load and parse reviews from TSV file using Papa Parse
@@ -74,7 +73,7 @@ async function loadReviews() {
     }
 }
 
-// Analyze a random review using DeepSeek API
+// Analyze a random review using LOCAL sentiment analysis
 async function analyzeRandomReview() {
     // Reset UI
     hideError();
@@ -95,7 +94,7 @@ async function analyzeRandomReview() {
         // Display the review
         reviewTextElement.textContent = review;
         
-        // Call DeepSeek API for sentiment analysis
+        // Call LOCAL sentiment analysis
         const sentiment = await analyzeSentiment(review);
         
         // Update UI with sentiment result
@@ -112,89 +111,150 @@ async function analyzeRandomReview() {
     }
 }
 
-// Call DeepSeek API for sentiment analysis
+// LOCAL sentiment analysis based on keyword matching
 async function analyzeSentiment(reviewText) {
-    const apiToken = apiTokenInput.value.trim();
+    // Simulate API delay for realistic experience
+    await new Promise(resolve => setTimeout(resolve, 300));
     
-    if (!apiToken) {
-        throw new Error('Please enter your DeepSeek API key');
-    }
+    // Comprehensive keyword lists for sentiment analysis
+    const positiveKeywords = [
+        // Strong positive
+        'excellent', 'outstanding', 'amazing', 'wonderful', 'fantastic', 'superb',
+        'perfect', 'brilliant', 'exceptional', 'phenomenal', 'awesome', 'magnificent',
+        'love', 'adore', 'favorite', 'best', 'great', 'good',
+        
+        // Moderate positive
+        'nice', 'pleased', 'satisfied', 'happy', 'enjoy', 'like', 'decent',
+        'recommend', 'worth', 'valuable', 'helpful', 'useful', 'effective',
+        
+        // Product-specific positive
+        'quality', 'durable', 'reliable', 'efficient', 'fast', 'quick', 'easy',
+        'comfortable', 'beautiful', 'stylish', 'attractive', 'well-made'
+    ];
     
-    // Prepare request options for DeepSeek API
-    const options = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiToken}`
-        },
-        body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are a sentiment analyzer. Analyze English product reviews. 
-                    Respond with ONLY one word: POSITIVE, NEGATIVE, or NEUTRAL.
-                    No explanations, just one word.`
-                },
-                {
-                    role: "user", 
-                    content: `Analyze sentiment of this product review: "${reviewText}"`
-                }
-            ],
-            max_tokens: 10,
-            temperature: 0.1
-        })
-    };
+    const negativeKeywords = [
+        // Strong negative
+        'terrible', 'horrible', 'awful', 'worst', 'disgusting', 'disappointing',
+        'hate', 'regret', 'waste', 'rubbish', 'garbage', 'useless', 'broken',
+        
+        // Moderate negative
+        'bad', 'poor', 'mediocre', 'average', 'okay', 'so-so', 'unhappy',
+        'problem', 'issue', 'fault', 'defect', 'flaw', 'disadvantage',
+        
+        // Product-specific negative
+        'cheap', 'flimsy', 'slow', 'difficult', 'complicated', 'uncomfortable',
+        'expensive', 'overpriced', 'noisy', 'heavy', 'small', 'big'
+    ];
     
-    try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', options);
+    const neutralKeywords = [
+        'average', 'standard', 'normal', 'regular', 'typical', 'ordinary',
+        'adequate', 'sufficient', 'acceptable', 'moderate', 'fair', 'reasonable'
+    ];
+    
+    // Negation words that invert sentiment
+    const negationWords = ['not', 'no', 'never', 'none', 'nothing', 'without'];
+    
+    // Intensifier words
+    const intensifiers = ['very', 'really', 'extremely', 'absolutely', 'totally'];
+    
+    const textLower = reviewText.toLowerCase();
+    const words = textLower.split(/\s+/);
+    
+    // Scoring system
+    let positiveScore = 0;
+    let negativeScore = 0;
+    let neutralScore = 1; // Start with 1 for baseline
+    
+    // Analyze each word in context
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i].replace(/[^\w\s]/g, '');
+        let wordScore = 0;
+        let isNegated = false;
         
-        // Handle different response statuses
-        if (response.status === 429) {
-            throw new Error('Rate limit exceeded. Please wait a moment.');
+        // Check for negation
+        if (i > 0 && negationWords.includes(words[i-1])) {
+            isNegated = true;
         }
         
-        if (response.status === 401) {
-            throw new Error('Invalid API key. Please check your DeepSeek API key.');
+        // Check for intensifiers
+        let intensity = 1;
+        if (i > 0 && intensifiers.includes(words[i-1])) {
+            intensity = 2;
         }
         
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+        // Check word against sentiment dictionaries
+        if (positiveKeywords.includes(word)) {
+            wordScore = isNegated ? -2 : 3;
+        } else if (negativeKeywords.includes(word)) {
+            wordScore = isNegated ? 2 : -3;
+        } else if (neutralKeywords.includes(word)) {
+            wordScore = 0.5;
         }
         
-        const data = await response.json();
+        // Apply intensity multiplier
+        wordScore *= intensity;
         
-        // Validate response format
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            console.error('Unexpected API response format:', data);
-            throw new Error('Received unexpected response format from the API.');
-        }
-        
-        const answer = data.choices[0].message.content.trim().toUpperCase();
-        
-        // Determine sentiment based on answer
-        let sentiment;
-        if (answer.includes('POSITIVE')) {
-            sentiment = 'positive';
-        } else if (answer.includes('NEGATIVE')) {
-            sentiment = 'negative';
+        // Add to appropriate score
+        if (wordScore > 0) {
+            positiveScore += wordScore;
+        } else if (wordScore < 0) {
+            negativeScore += Math.abs(wordScore);
         } else {
-            sentiment = 'neutral';
+            neutralScore += 0.1;
         }
-        
-        // Generate plausible score for compatibility
-        const score = 0.7 + Math.random() * 0.25;
-        
-        return {
-            label: answer,
-            score: score,
-            sentiment: sentiment
-        };
-        
-    } catch (error) {
-        // Re-throw network or API errors
-        throw error;
     }
+    
+    // Check for punctuation emphasis
+    if ((reviewText.match(/!/g) || []).length > 1) {
+        if (positiveScore > negativeScore) positiveScore += 2;
+        if (negativeScore > positiveScore) negativeScore += 2;
+    }
+    
+    // Check for question marks (uncertainty)
+    if ((reviewText.match(/\?/g) || []).length > 0) {
+        neutralScore += 1;
+    }
+    
+    // Check for contrast words
+    if (textLower.includes('but') || textLower.includes('however') || textLower.includes('although')) {
+        neutralScore += 1;
+    }
+    
+    // Determine final sentiment
+    let sentiment, label;
+    const maxScore = Math.max(positiveScore, negativeScore, neutralScore);
+    
+    if (maxScore === neutralScore || Math.abs(positiveScore - negativeScore) < 2) {
+        // Close scores or neutral wins
+        sentiment = 'neutral';
+        label = 'NEUTRAL';
+    } else if (positiveScore === maxScore) {
+        sentiment = 'positive';
+        label = 'POSITIVE';
+    } else {
+        sentiment = 'negative';
+        label = 'NEGATIVE';
+    }
+    
+    // Calculate confidence score
+    const totalScore = positiveScore + negativeScore + neutralScore;
+    let confidence;
+    if (sentiment === 'neutral') {
+        confidence = 0.5 + (neutralScore / totalScore) * 0.3;
+    } else if (sentiment === 'positive') {
+        confidence = 0.6 + (positiveScore / totalScore) * 0.3;
+    } else {
+        confidence = 0.6 + (negativeScore / totalScore) * 0.3;
+    }
+    
+    // Ensure confidence is within bounds
+    confidence = Math.min(Math.max(confidence, 0.5), 0.95);
+    
+    return {
+        label: label,
+        score: confidence,
+        sentiment: sentiment
+    };
 }
 
 // Update the UI with sentiment results
@@ -223,6 +283,9 @@ function updateSentimentDisplay(sentimentResult) {
     
     // Update status with confidence score
     statusElement.textContent = `Analysis complete with ${(sentimentResult.score * 100).toFixed(1)}% confidence. Click to analyze another review.`;
+    
+    // Log analysis details for debugging
+    console.log(`Sentiment Analysis: ${sentimentResult.sentiment} (${(sentimentResult.score * 100).toFixed(1)}% confidence)`);
 }
 
 // Display error message
