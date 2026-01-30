@@ -118,7 +118,7 @@ async function analyzeSentiment(reviewText) {
         options.headers['Authorization'] = `Bearer ${apiToken}`;
     }
     
-    const model = 'distilbert-base-uncased-finetuned-sst-2-english';
+    const model = 'nlptown/bert-base-multilingual-uncased-sentiment';
     const apiUrl = `https://api-inference.huggingface.co/models/${model}`;
     
     try {
