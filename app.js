@@ -118,7 +118,7 @@ async function analyzeSentiment(reviewText) {
         options.headers['Authorization'] = `Bearer ${apiToken}`;
     }
     
-    const model = 'siebert/sentiment-roberta-large-english';
+    const model = 'distilbert-base-uncased-finetuned-sst-2-english';
     const apiUrl = `https://api-inference.huggingface.co/models/${model}`;
     
     try {
