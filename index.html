@@ -1,281 +1,304 @@
-// app.js - Sentiment analysis using Hugging Face Inference API
-// Model: siebert/sentiment-roberta-large-english
-
-// Global variables
-let reviews = []; // Array to store parsed reviews from TSV
-let apiToken = ""; // User's Hugging Face API token
-
-// DOM elements
-const analyzeBtn = document.getElementById("analyze-btn");
-const reviewText = document.getElementById("review-text");
-const sentimentResult = document.getElementById("sentiment-result");
-const loadingElement = document.querySelector(".loading");
-const errorElement = document.getElementById("error-message");
-const apiTokenInput = document.getElementById("api-token");
-
-// Hugging Face API configuration
-const MODEL_URL = "https://api-inference.huggingface.co/models/siebert/sentiment-roberta-large-english";
-
-// Initialize the app when DOM is loaded
-document.addEventListener("DOMContentLoaded", function () {
-    console.log("Initializing Review Sentiment Analyzer...");
-    
-    // Load the TSV file with reviews
-    loadReviews();
-    
-    // Set up event listeners
-    analyzeBtn.addEventListener("click", analyzeRandomReview);
-    apiTokenInput.addEventListener("input", saveApiToken);
-    
-    // Load saved API token from localStorage if exists
-    const savedToken = localStorage.getItem("hfApiToken");
-    if (savedToken) {
-        apiTokenInput.value = savedToken;
-        apiToken = savedToken;
-        console.log("Loaded saved API token");
-    }
-});
-
-/**
- * Load and parse the TSV file using Papa Parse
- * File: reviews_test.tsv (should be in same directory)
- */
-function loadReviews() {
-    console.log("Loading reviews from TSV file...");
-    
-    fetch("reviews_test.tsv")
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error(`Failed to load TSV file: ${response.status} ${response.statusText}`);
-            }
-            return response.text();
-        })
-        .then((tsvData) => {
-            // Use Papa Parse to parse TSV data
-            Papa.parse(tsvData, {
-                header: true,
-                delimiter: "\t",
-                complete: function(results) {
-                    // Extract text column from parsed data
-                    if (results.data && results.data.length > 0) {
-                        reviews = results.data
-                            .map(row => row.text)
-                            .filter(text => typeof text === "string" && text.trim() !== "");
-                        
-                        console.log(`Successfully loaded ${reviews.length} reviews from TSV`);
-                    } else {
-                        showError("No review data found in TSV file. Please ensure the file contains a 'text' column.");
-                    }
-                },
-                error: function(error) {
-                    console.error("TSV parsing error:", error);
-                    showError(`Failed to parse TSV file: ${error.message}`);
-                }
-            });
-        })
-        .catch((error) => {
-            console.error("Error loading TSV file:", error);
-            showError(`Failed to load reviews: ${error.message}. Please ensure 'reviews_test.tsv' exists.`);
-        });
-}
-
-/**
- * Save API token to localStorage
- */
-function saveApiToken() {
-    apiToken = apiTokenInput.value.trim();
-    if (apiToken) {
-        localStorage.setItem("hfApiToken", apiToken);
-        console.log("API token saved to localStorage");
-    } else {
-        localStorage.removeItem("hfApiToken");
-        console.log("API token cleared from localStorage");
-    }
-}
-
-/**
- * Analyze a random review from the loaded TSV data
- */
-async function analyzeRandomReview() {
-    // Clear any previous errors
-    hideError();
-    
-    // Check if reviews are loaded
-    if (!Array.isArray(reviews) || reviews.length === 0) {
-        showError("No reviews available. Please wait for reviews to load or check TSV file.");
-        return;
-    }
-    
-    // Select a random review
-    const randomIndex = Math.floor(Math.random() * reviews.length);
-    const selectedReview = reviews[randomIndex];
-    
-    // Display the selected review
-    reviewText.textContent = selectedReview;
-    
-    // Show loading state
-    loadingElement.style.display = "block";
-    analyzeBtn.disabled = true;
-    sentimentResult.innerHTML = ""; // Clear previous result
-    sentimentResult.className = "sentiment-result"; // Reset classes
-    
-    try {
-        // Analyze sentiment using Hugging Face API
-        const result = await analyzeSentimentWithAPI(selectedReview);
-        
-        // Display the result
-        displaySentiment(result);
-    } catch (error) {
-        console.error("Error analyzing sentiment:", error);
-        showError(error.message || "Failed to analyze sentiment. Please check your API token and try again.");
-    } finally {
-        // Hide loading state
-        loadingElement.style.display = "none";
-        analyzeBtn.disabled = false;
-    }
-}
-
-/**
- * Call Hugging Face Inference API to analyze sentiment
- * @param {string} text - Review text to analyze
- * @returns {Promise<Array>} - Sentiment analysis results
- */
-async function analyzeSentimentWithAPI(text) {
-    // Prepare request headers
-    const headers = {
-        "Content-Type": "application/json"
-    };
-    
-    // Add Authorization header if token is provided
-    if (apiToken) {
-        headers["Authorization"] = `Bearer ${apiToken}`;
-    }
-    
-    // Prepare request body
-    const body = JSON.stringify({
-        inputs: text
-    });
-    
-    // Make API request
-    const response = await fetch(MODEL_URL, {
-        method: "POST",
-        headers: headers,
-        body: body
-    });
-    
-    // Check if request was successful
-    if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-        
-        // Try to parse error details
-        try {
-            const errorJson = JSON.parse(errorText);
-            if (errorJson.error) {
-                errorMessage = errorJson.error;
-            }
-        } catch (e) {
-            // If can't parse as JSON, use raw error text
-            if (errorText) {
-                errorMessage += ` - ${errorText}`;
-            }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Sentiment Analyzer</title>
+    <!-- Font Awesome для иконок -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Papa Parse для парсинга TSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
-        throw new Error(errorMessage);
-    }
-    
-    // Parse and return the response
-    return await response.json();
-}
-
-/**
- * Display sentiment result in the UI
- * @param {Array} apiResult - Result from Hugging Face API
- */
-function displaySentiment(apiResult) {
-    // Default values (neutral sentiment)
-    let sentiment = "neutral";
-    let score = 0.5;
-    let label = "NEUTRAL";
-    
-    // Parse the API response
-    // Expected format: [[{label: "POSITIVE", score: 0.99}, {label: "NEGATIVE", score: 0.01}]]
-    try {
-        if (Array.isArray(apiResult) && apiResult.length > 0) {
-            const sentimentArray = apiResult[0];
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .container {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 800px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4a4a4a;
+            margin-bottom: 20px;
+            font-size: 2.2rem;
+        }
+        
+        .description {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .api-section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .api-section h2 {
+            margin-bottom: 15px;
+            color: #4a4a4a;
+            font-size: 1.4rem;
+        }
+        
+        .api-input {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        #api-token {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            width: 100%;
+        }
+        
+        #api-token:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+        
+        #analyze-btn {
+            background: linear-gradient(to right, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+        
+        #analyze-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        #analyze-btn:active {
+            transform: translateY(0);
+        }
+        
+        #analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .review-section {
+            margin-bottom: 25px;
+        }
+        
+        .review-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        .review-text {
+            line-height: 1.6;
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #444;
+            min-height: 60px;
+        }
+        
+        .sentiment-result {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            font-weight: bold;
+            font-size: 18px;
+            min-height: 60px;
+        }
+        
+        .positive {
+            color: #28a745;
+            border: 2px solid #28a745;
+            background-color: rgba(40, 167, 69, 0.1);
+        }
+        
+        .negative {
+            color: #dc3545;
+            border: 2px solid #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        
+        .neutral {
+            color: #ffc107;
+            border: 2px solid #ffc107;
+            background-color: rgba(255, 193, 7, 0.1);
+        }
+        
+        .icon {
+            font-size: 24px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #dc3545;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .instructions h3 {
+            margin-bottom: 10px;
+            color: #4a4a4a;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                width: 95%;
+                padding: 20px;
+            }
             
-            if (Array.isArray(sentimentArray) && sentimentArray.length > 0) {
-                // Get the first (highest confidence) result
-                const sentimentData = sentimentArray[0];
-                
-                if (sentimentData && typeof sentimentData === "object") {
-                    label = sentimentData.label || "NEUTRAL";
-                    score = sentimentData.score || 0.5;
-                    
-                    // Determine sentiment based on rules from assignment
-                    if (label.toUpperCase() === "POSITIVE" && score > 0.5) {
-                        sentiment = "positive";
-                    } else if (label.toUpperCase() === "NEGATIVE" && score > 0.5) {
-                        sentiment = "negative";
-                    } else {
-                        sentiment = "neutral";
-                        label = "NEUTRAL";
-                    }
-                }
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            #analyze-btn {
+                width: 100%;
             }
         }
-    } catch (error) {
-        console.error("Error parsing API response:", error);
-        // Keep default neutral values
-    }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Review Sentiment Analyzer</h1>
+        <p class="description">Analyze the sentiment of product reviews using Hugging Face's AI model</p>
+        
+        <div class="api-section">
+            <h2>Hugging Face API Setup</h2>
+            <div class="api-input">
+                <label for="api-token">Enter your Hugging Face API Token:</label>
+                <input type="text" id="api-token" placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                <p><small>Your token is stored only in your browser and is never sent to our servers.</small></p>
+            </div>
+        </div>
+        
+        <div class="review-section">
+            <button id="analyze-btn">Analyze Random Review</button>
+            
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Analyzing sentiment...</p>
+            </div>
+            
+            <div class="error" id="error-message"></div>
+            
+            <div class="review-card">
+                <h3>Selected Review:</h3>
+                <p class="review-text" id="review-text">Click the button above to analyze a random review</p>
+            </div>
+            
+            <div class="sentiment-result" id="sentiment-result">
+                <i class="fas fa-question-circle icon"></i>
+                <span>Sentiment will appear here</span>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>How to get a Hugging Face API Token:</h3>
+            <ol>
+                <li>Go to <a href="https://huggingface.co/" target="_blank">huggingface.co</a> and create a free account</li>
+                <li>Navigate to your profile settings and access tokens section</li>
+                <li>Generate a new token with read permissions</li>
+                <li>Copy the token and paste it in the field above</li>
+            </ol>
+        </div>
+    </div>
     
-    // Update UI with sentiment result
-    sentimentResult.classList.add(sentiment);
-    
-    // Format confidence percentage
-    const confidencePercent = (score * 100).toFixed(1);
-    
-    // Get appropriate icon for sentiment
-    const iconClass = getSentimentIcon(sentiment);
-    
-    // Create result HTML
-    sentimentResult.innerHTML = `
-        <i class="fas ${iconClass} icon"></i>
-        <span>${label} (${confidencePercent}% confidence)</span>
-    `;
-}
+    <footer>
+        <p>This app uses the siebert/sentiment-roberta-large-english model from Hugging Face</p>
+    </footer>
 
-/**
- * Get Font Awesome icon class for sentiment
- * @param {string} sentiment - "positive", "negative", or "neutral"
- * @returns {string} - Icon class name
- */
-function getSentimentIcon(sentiment) {
-    switch (sentiment) {
-        case "positive":
-            return "fa-thumbs-up";
-        case "negative":
-            return "fa-thumbs-down";
-        default:
-            return "fa-question-circle";
-    }
-}
-
-/**
- * Show error message in UI
- * @param {string} message - Error message to display
- */
-function showError(message) {
-    errorElement.textContent = message;
-    errorElement.style.display = "block";
-    
-    // Auto-hide error after 5 seconds
-    setTimeout(hideError, 5000);
-}
-
-/**
- * Hide error message
- */
-function hideError() {
-    errorElement.style.display = "none";
-}
+    <!-- Подключаем JavaScript -->
+    <script>
+        // Временный скрипт для проверки загрузки
+        console.log("HTML загружен, запускаем app.js...");
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
