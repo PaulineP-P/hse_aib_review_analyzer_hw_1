@@ -1,302 +1,281 @@
+// app.js - Sentiment analysis using Hugging Face Inference API
+// Model: siebert/sentiment-roberta-large-english
+
 // Global variables
-let reviews = [];
-let isLoadingReviews = false;
+let reviews = []; // Array to store parsed reviews from TSV
+let apiToken = ""; // User's Hugging Face API token
 
-// DOM Elements
-const apiTokenInput = document.getElementById('api-token');
-const analyzeBtn = document.getElementById('analyze-btn');
-const loadingDiv = document.getElementById('loading');
-const errorMessageDiv = document.getElementById('error-message');
-const reviewSection = document.getElementById('review-section');
-const reviewTextElement = document.getElementById('review-text');
-const sentimentIconElement = document.getElementById('sentiment-icon');
-const sentimentTextElement = document.getElementById('sentiment-text');
-const statusElement = document.getElementById('status');
+// DOM elements
+const analyzeBtn = document.getElementById("analyze-btn");
+const reviewText = document.getElementById("review-text");
+const sentimentResult = document.getElementById("sentiment-result");
+const loadingElement = document.querySelector(".loading");
+const errorElement = document.getElementById("error-message");
+const apiTokenInput = document.getElementById("api-token");
 
-// Initialize the app
-document.addEventListener('DOMContentLoaded', () => {
-    analyzeBtn.addEventListener('click', analyzeRandomReview);
+// Hugging Face API configuration
+const MODEL_URL = "https://api-inference.huggingface.co/models/siebert/sentiment-roberta-large-english";
+
+// Initialize the app when DOM is loaded
+document.addEventListener("DOMContentLoaded", function () {
+    console.log("Initializing Review Sentiment Analyzer...");
+    
+    // Load the TSV file with reviews
     loadReviews();
     
-    // Меняем текст для ясности (API больше не нужно)
-    const tokenNote = document.querySelector('.token-note');
-    if (tokenNote) {
-        tokenNote.textContent = 'API key is not required for local sentiment analysis';
+    // Set up event listeners
+    analyzeBtn.addEventListener("click", analyzeRandomReview);
+    apiTokenInput.addEventListener("input", saveApiToken);
+    
+    // Load saved API token from localStorage if exists
+    const savedToken = localStorage.getItem("hfApiToken");
+    if (savedToken) {
+        apiTokenInput.value = savedToken;
+        apiToken = savedToken;
+        console.log("Loaded saved API token");
     }
-    apiTokenInput.placeholder = 'API key not needed (using local analysis)';
-    apiTokenInput.disabled = true;
-    apiTokenInput.style.backgroundColor = '#f5f5f5';
-    apiTokenInput.style.cursor = 'not-allowed';
 });
 
-// Load and parse reviews from TSV file using Papa Parse
-async function loadReviews() {
-    try {
-        statusElement.textContent = 'Loading reviews from file...';
-        
-        // Используем RAW URL для обхода CORS
-        const response = await fetch('https://raw.githubusercontent.com/PaulineP-P/hse_aib_review_analyzer_hw_1/main/reviews_test.tsv');
-        if (!response.ok) {
-            throw new Error(`Failed to load TSV file: ${response.status} ${response.statusText}`);
-        }
-        
-        const tsvData = await response.text();
-        
-        // Parse TSV using Papa Parse
-        const result = Papa.parse(tsvData, {
-            header: true,
-            delimiter: '\t',
-            skipEmptyLines: true,
-            dynamicTyping: true
+/**
+ * Load and parse the TSV file using Papa Parse
+ * File: reviews_test.tsv (should be in same directory)
+ */
+function loadReviews() {
+    console.log("Loading reviews from TSV file...");
+    
+    fetch("reviews_test.tsv")
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`Failed to load TSV file: ${response.status} ${response.statusText}`);
+            }
+            return response.text();
+        })
+        .then((tsvData) => {
+            // Use Papa Parse to parse TSV data
+            Papa.parse(tsvData, {
+                header: true,
+                delimiter: "\t",
+                complete: function(results) {
+                    // Extract text column from parsed data
+                    if (results.data && results.data.length > 0) {
+                        reviews = results.data
+                            .map(row => row.text)
+                            .filter(text => typeof text === "string" && text.trim() !== "");
+                        
+                        console.log(`Successfully loaded ${reviews.length} reviews from TSV`);
+                    } else {
+                        showError("No review data found in TSV file. Please ensure the file contains a 'text' column.");
+                    }
+                },
+                error: function(error) {
+                    console.error("TSV parsing error:", error);
+                    showError(`Failed to parse TSV file: ${error.message}`);
+                }
+            });
+        })
+        .catch((error) => {
+            console.error("Error loading TSV file:", error);
+            showError(`Failed to load reviews: ${error.message}. Please ensure 'reviews_test.tsv' exists.`);
         });
-        
-        if (result.errors && result.errors.length > 0) {
-            console.warn('Parsing errors:', result.errors);
-        }
-        
-        // Extract review texts from the 'text' column
-        reviews = result.data
-            .map(row => row.text)
-            .filter(text => text && text.trim().length > 0);
-        
-        if (reviews.length === 0) {
-            throw new Error('No reviews found in the TSV file. Please ensure there is a "text" column with review data.');
-        }
-        
-        statusElement.textContent = `Loaded ${reviews.length} reviews. Ready to analyze!`;
-        analyzeBtn.disabled = false;
-        
-    } catch (error) {
-        showError(`Failed to load reviews: ${error.message}`);
-        analyzeBtn.disabled = true;
-        statusElement.textContent = 'Failed to load reviews. Please check the console for details.';
+}
+
+/**
+ * Save API token to localStorage
+ */
+function saveApiToken() {
+    apiToken = apiTokenInput.value.trim();
+    if (apiToken) {
+        localStorage.setItem("hfApiToken", apiToken);
+        console.log("API token saved to localStorage");
+    } else {
+        localStorage.removeItem("hfApiToken");
+        console.log("API token cleared from localStorage");
     }
 }
 
-// Analyze a random review using LOCAL sentiment analysis
+/**
+ * Analyze a random review from the loaded TSV data
+ */
 async function analyzeRandomReview() {
-    // Reset UI
+    // Clear any previous errors
     hideError();
-    reviewSection.classList.remove('active');
-    loadingDiv.classList.add('active');
+    
+    // Check if reviews are loaded
+    if (!Array.isArray(reviews) || reviews.length === 0) {
+        showError("No reviews available. Please wait for reviews to load or check TSV file.");
+        return;
+    }
+    
+    // Select a random review
+    const randomIndex = Math.floor(Math.random() * reviews.length);
+    const selectedReview = reviews[randomIndex];
+    
+    // Display the selected review
+    reviewText.textContent = selectedReview;
+    
+    // Show loading state
+    loadingElement.style.display = "block";
     analyzeBtn.disabled = true;
+    sentimentResult.innerHTML = ""; // Clear previous result
+    sentimentResult.className = "sentiment-result"; // Reset classes
     
     try {
-        // Check if we have reviews loaded
-        if (reviews.length === 0) {
-            throw new Error('No reviews available. Please wait for reviews to load or check the TSV file.');
-        }
+        // Analyze sentiment using Hugging Face API
+        const result = await analyzeSentimentWithAPI(selectedReview);
         
-        // Select a random review
-        const randomIndex = Math.floor(Math.random() * reviews.length);
-        const review = reviews[randomIndex];
-        
-        // Display the review
-        reviewTextElement.textContent = review;
-        
-        // Call LOCAL sentiment analysis
-        const sentiment = await analyzeSentiment(review);
-        
-        // Update UI with sentiment result
-        updateSentimentDisplay(sentiment);
-        
-        // Show the review section
-        reviewSection.classList.add('active');
-        
+        // Display the result
+        displaySentiment(result);
     } catch (error) {
-        showError(`Analysis failed: ${error.message}`);
+        console.error("Error analyzing sentiment:", error);
+        showError(error.message || "Failed to analyze sentiment. Please check your API token and try again.");
     } finally {
-        loadingDiv.classList.remove('active');
+        // Hide loading state
+        loadingElement.style.display = "none";
         analyzeBtn.disabled = false;
     }
 }
 
-// LOCAL sentiment analysis based on keyword matching
-async function analyzeSentiment(reviewText) {
-    // Simulate API delay for realistic experience
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Comprehensive keyword lists for sentiment analysis
-    const positiveKeywords = [
-        // Strong positive
-        'excellent', 'outstanding', 'amazing', 'wonderful', 'fantastic', 'superb',
-        'perfect', 'brilliant', 'exceptional', 'phenomenal', 'awesome', 'magnificent',
-        'love', 'adore', 'favorite', 'best', 'great', 'good',
-        
-        // Moderate positive
-        'nice', 'pleased', 'satisfied', 'happy', 'enjoy', 'like', 'decent',
-        'recommend', 'worth', 'valuable', 'helpful', 'useful', 'effective',
-        
-        // Product-specific positive
-        'quality', 'durable', 'reliable', 'efficient', 'fast', 'quick', 'easy',
-        'comfortable', 'beautiful', 'stylish', 'attractive', 'well-made'
-    ];
-    
-    const negativeKeywords = [
-        // Strong negative
-        'terrible', 'horrible', 'awful', 'worst', 'disgusting', 'disappointing',
-        'hate', 'regret', 'waste', 'rubbish', 'garbage', 'useless', 'broken',
-        
-        // Moderate negative
-        'bad', 'poor', 'mediocre', 'average', 'okay', 'so-so', 'unhappy',
-        'problem', 'issue', 'fault', 'defect', 'flaw', 'disadvantage',
-        
-        // Product-specific negative
-        'cheap', 'flimsy', 'slow', 'difficult', 'complicated', 'uncomfortable',
-        'expensive', 'overpriced', 'noisy', 'heavy', 'small', 'big'
-    ];
-    
-    const neutralKeywords = [
-        'average', 'standard', 'normal', 'regular', 'typical', 'ordinary',
-        'adequate', 'sufficient', 'acceptable', 'moderate', 'fair', 'reasonable'
-    ];
-    
-    // Negation words that invert sentiment
-    const negationWords = ['not', 'no', 'never', 'none', 'nothing', 'without'];
-    
-    // Intensifier words
-    const intensifiers = ['very', 'really', 'extremely', 'absolutely', 'totally'];
-    
-    const textLower = reviewText.toLowerCase();
-    const words = textLower.split(/\s+/);
-    
-    // Scoring system
-    let positiveScore = 0;
-    let negativeScore = 0;
-    let neutralScore = 1; // Start with 1 for baseline
-    
-    // Analyze each word in context
-    for (let i = 0; i < words.length; i++) {
-        const word = words[i].replace(/[^\w\s]/g, '');
-        let wordScore = 0;
-        let isNegated = false;
-        
-        // Check for negation
-        if (i > 0 && negationWords.includes(words[i-1])) {
-            isNegated = true;
-        }
-        
-        // Check for intensifiers
-        let intensity = 1;
-        if (i > 0 && intensifiers.includes(words[i-1])) {
-            intensity = 2;
-        }
-        
-        // Check word against sentiment dictionaries
-        if (positiveKeywords.includes(word)) {
-            wordScore = isNegated ? -2 : 3;
-        } else if (negativeKeywords.includes(word)) {
-            wordScore = isNegated ? 2 : -3;
-        } else if (neutralKeywords.includes(word)) {
-            wordScore = 0.5;
-        }
-        
-        // Apply intensity multiplier
-        wordScore *= intensity;
-        
-        // Add to appropriate score
-        if (wordScore > 0) {
-            positiveScore += wordScore;
-        } else if (wordScore < 0) {
-            negativeScore += Math.abs(wordScore);
-        } else {
-            neutralScore += 0.1;
-        }
-    }
-    
-    // Check for punctuation emphasis
-    if ((reviewText.match(/!/g) || []).length > 1) {
-        if (positiveScore > negativeScore) positiveScore += 2;
-        if (negativeScore > positiveScore) negativeScore += 2;
-    }
-    
-    // Check for question marks (uncertainty)
-    if ((reviewText.match(/\?/g) || []).length > 0) {
-        neutralScore += 1;
-    }
-    
-    // Check for contrast words
-    if (textLower.includes('but') || textLower.includes('however') || textLower.includes('although')) {
-        neutralScore += 1;
-    }
-    
-    // Determine final sentiment
-    let sentiment, label;
-    const maxScore = Math.max(positiveScore, negativeScore, neutralScore);
-    
-    if (maxScore === neutralScore || Math.abs(positiveScore - negativeScore) < 2) {
-        // Close scores or neutral wins
-        sentiment = 'neutral';
-        label = 'NEUTRAL';
-    } else if (positiveScore === maxScore) {
-        sentiment = 'positive';
-        label = 'POSITIVE';
-    } else {
-        sentiment = 'negative';
-        label = 'NEGATIVE';
-    }
-    
-    // Calculate confidence score
-    const totalScore = positiveScore + negativeScore + neutralScore;
-    let confidence;
-    if (sentiment === 'neutral') {
-        confidence = 0.5 + (neutralScore / totalScore) * 0.3;
-    } else if (sentiment === 'positive') {
-        confidence = 0.6 + (positiveScore / totalScore) * 0.3;
-    } else {
-        confidence = 0.6 + (negativeScore / totalScore) * 0.3;
-    }
-    
-    // Ensure confidence is within bounds
-    confidence = Math.min(Math.max(confidence, 0.5), 0.95);
-    
-    return {
-        label: label,
-        score: confidence,
-        sentiment: sentiment
+/**
+ * Call Hugging Face Inference API to analyze sentiment
+ * @param {string} text - Review text to analyze
+ * @returns {Promise<Array>} - Sentiment analysis results
+ */
+async function analyzeSentimentWithAPI(text) {
+    // Prepare request headers
+    const headers = {
+        "Content-Type": "application/json"
     };
-}
-
-// Update the UI with sentiment results
-function updateSentimentDisplay(sentimentResult) {
-    // Set sentiment text
-    sentimentTextElement.textContent = sentimentResult.sentiment.toUpperCase();
     
-    // Clear previous icon classes
-    sentimentIconElement.className = 'sentiment-icon';
-    sentimentTextElement.className = 'sentiment-text';
-    
-    // Set icon and color based on sentiment
-    if (sentimentResult.sentiment === 'positive') {
-        sentimentIconElement.innerHTML = '<i class="fas fa-thumbs-up"></i>';
-        sentimentIconElement.classList.add('positive');
-        sentimentTextElement.classList.add('positive');
-    } else if (sentimentResult.sentiment === 'negative') {
-        sentimentIconElement.innerHTML = '<i class="fas fa-thumbs-down"></i>';
-        sentimentIconElement.classList.add('negative');
-        sentimentTextElement.classList.add('negative');
-    } else {
-        sentimentIconElement.innerHTML = '<i class="fas fa-question-circle"></i>';
-        sentimentIconElement.classList.add('neutral');
-        sentimentTextElement.classList.add('neutral');
+    // Add Authorization header if token is provided
+    if (apiToken) {
+        headers["Authorization"] = `Bearer ${apiToken}`;
     }
     
-    // Update status with confidence score
-    statusElement.textContent = `Analysis complete with ${(sentimentResult.score * 100).toFixed(1)}% confidence. Click to analyze another review.`;
+    // Prepare request body
+    const body = JSON.stringify({
+        inputs: text
+    });
     
-    // Log analysis details for debugging
-    console.log(`Sentiment Analysis: ${sentimentResult.sentiment} (${(sentimentResult.score * 100).toFixed(1)}% confidence)`);
+    // Make API request
+    const response = await fetch(MODEL_URL, {
+        method: "POST",
+        headers: headers,
+        body: body
+    });
+    
+    // Check if request was successful
+    if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+        
+        // Try to parse error details
+        try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.error) {
+                errorMessage = errorJson.error;
+            }
+        } catch (e) {
+            // If can't parse as JSON, use raw error text
+            if (errorText) {
+                errorMessage += ` - ${errorText}`;
+            }
+        }
+        
+        throw new Error(errorMessage);
+    }
+    
+    // Parse and return the response
+    return await response.json();
 }
 
-// Display error message
+/**
+ * Display sentiment result in the UI
+ * @param {Array} apiResult - Result from Hugging Face API
+ */
+function displaySentiment(apiResult) {
+    // Default values (neutral sentiment)
+    let sentiment = "neutral";
+    let score = 0.5;
+    let label = "NEUTRAL";
+    
+    // Parse the API response
+    // Expected format: [[{label: "POSITIVE", score: 0.99}, {label: "NEGATIVE", score: 0.01}]]
+    try {
+        if (Array.isArray(apiResult) && apiResult.length > 0) {
+            const sentimentArray = apiResult[0];
+            
+            if (Array.isArray(sentimentArray) && sentimentArray.length > 0) {
+                // Get the first (highest confidence) result
+                const sentimentData = sentimentArray[0];
+                
+                if (sentimentData && typeof sentimentData === "object") {
+                    label = sentimentData.label || "NEUTRAL";
+                    score = sentimentData.score || 0.5;
+                    
+                    // Determine sentiment based on rules from assignment
+                    if (label.toUpperCase() === "POSITIVE" && score > 0.5) {
+                        sentiment = "positive";
+                    } else if (label.toUpperCase() === "NEGATIVE" && score > 0.5) {
+                        sentiment = "negative";
+                    } else {
+                        sentiment = "neutral";
+                        label = "NEUTRAL";
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Error parsing API response:", error);
+        // Keep default neutral values
+    }
+    
+    // Update UI with sentiment result
+    sentimentResult.classList.add(sentiment);
+    
+    // Format confidence percentage
+    const confidencePercent = (score * 100).toFixed(1);
+    
+    // Get appropriate icon for sentiment
+    const iconClass = getSentimentIcon(sentiment);
+    
+    // Create result HTML
+    sentimentResult.innerHTML = `
+        <i class="fas ${iconClass} icon"></i>
+        <span>${label} (${confidencePercent}% confidence)</span>
+    `;
+}
+
+/**
+ * Get Font Awesome icon class for sentiment
+ * @param {string} sentiment - "positive", "negative", or "neutral"
+ * @returns {string} - Icon class name
+ */
+function getSentimentIcon(sentiment) {
+    switch (sentiment) {
+        case "positive":
+            return "fa-thumbs-up";
+        case "negative":
+            return "fa-thumbs-down";
+        default:
+            return "fa-question-circle";
+    }
+}
+
+/**
+ * Show error message in UI
+ * @param {string} message - Error message to display
+ */
 function showError(message) {
-    errorMessageDiv.textContent = message;
-    errorMessageDiv.classList.add('active');
-    console.error(message);
+    errorElement.textContent = message;
+    errorElement.style.display = "block";
+    
+    // Auto-hide error after 5 seconds
+    setTimeout(hideError, 5000);
 }
 
-// Hide error message
+/**
+ * Hide error message
+ */
 function hideError() {
-    errorMessageDiv.classList.remove('active');
-    errorMessageDiv.textContent = '';
+    errorElement.style.display = "none";
 }
