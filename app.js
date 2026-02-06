@@ -1,281 +1,246 @@
-// app.js - Sentiment analysis using Hugging Face Inference API
-// Model: siebert/sentiment-roberta-large-english
+// Review Sentiment Analyzer - app.js
+// Использует Hugging Face Inference API
 
-// Global variables
-let reviews = []; // Array to store parsed reviews from TSV
-let apiToken = ""; // User's Hugging Face API token
-
-// DOM elements
-const analyzeBtn = document.getElementById("analyze-btn");
-const reviewText = document.getElementById("review-text");
-const sentimentResult = document.getElementById("sentiment-result");
-const loadingElement = document.querySelector(".loading");
-const errorElement = document.getElementById("error-message");
-const apiTokenInput = document.getElementById("api-token");
-
-// Hugging Face API configuration
-const MODEL_URL = "https://api-inference.huggingface.co/models/siebert/sentiment-roberta-large-english";
-
-// Initialize the app when DOM is loaded
-document.addEventListener("DOMContentLoaded", function () {
-    console.log("Initializing Review Sentiment Analyzer...");
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('App loaded');
     
-    // Load the TSV file with reviews
+    // DOM элементы
+    const analyzeBtn = document.getElementById('analyze-btn');
+    const reviewText = document.getElementById('review-text');
+    const sentimentResult = document.getElementById('sentiment-result');
+    const loadingElement = document.querySelector('.loading');
+    const errorElement = document.getElementById('error-message');
+    const apiTokenInput = document.getElementById('api-token');
+    
+    // Массив для хранения отзывов
+    let reviews = [];
+    // Токен API
+    let apiToken = '';
+    
+    // URL модели Hugging Face
+    const MODEL_URL = 'https://api-inference.huggingface.co/models/siebert/sentiment-roberta-large-english';
+    
+    // ========== ФУНКЦИИ ==========
+    
+    // 1. Загрузка отзывов из TSV файла
+    function loadReviews() {
+        console.log('Loading reviews from TSV...');
+        
+        fetch('reviews_test.tsv')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Cannot load reviews_test.tsv. Make sure file exists.');
+                }
+                return response.text();
+            })
+            .then(tsvData => {
+                // Используем PapaParse для парсинга TSV
+                const results = Papa.parse(tsvData, {
+                    header: true,
+                    delimiter: '\t',
+                    skipEmptyLines: true
+                });
+                
+                if (results.errors.length > 0) {
+                    throw new Error('Error parsing TSV: ' + results.errors[0].message);
+                }
+                
+                // Извлекаем колонку 'text'
+                reviews = results.data
+                    .map(row => row.text)
+                    .filter(text => text && text.trim() !== '');
+                
+                console.log(`Loaded ${reviews.length} reviews`);
+            })
+            .catch(error => {
+                console.error('Error loading reviews:', error);
+                showError(`Cannot load reviews: ${error.message}`);
+                
+                // Если файл не загрузился, используем тестовые отзывы
+                reviews = [
+                    "This product is amazing! I love it!",
+                    "Terrible quality, would not recommend.",
+                    "It's okay, nothing special.",
+                    "Excellent value for the money.",
+                    "Very disappointed with this purchase."
+                ];
+                console.log('Using fallback reviews');
+            });
+    }
+    
+    // 2. Сохранение токена
+    function saveApiToken() {
+        apiToken = apiTokenInput.value.trim();
+        if (apiToken) {
+            localStorage.setItem('hfApiToken', apiToken);
+            console.log('Token saved');
+        } else {
+            localStorage.removeItem('hfApiToken');
+            console.log('Token cleared');
+        }
+    }
+    
+    // 3. Анализ случайного отзыва
+    async function analyzeRandomReview() {
+        // Скрыть предыдущие ошибки
+        hideError();
+        
+        // Проверить, есть ли отзывы
+        if (reviews.length === 0) {
+            showError('No reviews loaded. Please wait or check TSV file.');
+            return;
+        }
+        
+        // Выбрать случайный отзыв
+        const randomIndex = Math.floor(Math.random() * reviews.length);
+        const selectedReview = reviews[randomIndex];
+        
+        // Показать отзыв
+        reviewText.textContent = selectedReview;
+        
+        // Показать загрузку
+        loadingElement.style.display = 'block';
+        analyzeBtn.disabled = true;
+        
+        // Очистить предыдущий результат
+        sentimentResult.innerHTML = '';
+        sentimentResult.className = 'sentiment-result';
+        
+        try {
+            // Вызвать API для анализа
+            const result = await callHuggingFaceAPI(selectedReview);
+            
+            // Обработать и показать результат
+            processAndDisplayResult(result);
+        } catch (error) {
+            console.error('Analysis error:', error);
+            showError(`Analysis failed: ${error.message}`);
+        } finally {
+            // Скрыть загрузку
+            loadingElement.style.display = 'none';
+            analyzeBtn.disabled = false;
+        }
+    }
+    
+    // 4. Вызов Hugging Face API
+    async function callHuggingFaceAPI(text) {
+        // Подготовить заголовки
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        // Добавить токен, если он есть
+        if (apiToken) {
+            headers['Authorization'] = `Bearer ${apiToken}`;
+        }
+        
+        // Отправить запрос
+        const response = await fetch(MODEL_URL, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ inputs: text })
+        });
+        
+        // Проверить ответ
+        if (!response.ok) {
+            let errorMsg = `API error: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData.error) {
+                    errorMsg = errorData.error;
+                }
+            } catch (e) {
+                // Не удалось распарсить JSON
+            }
+            throw new Error(errorMsg);
+        }
+        
+        // Вернуть результат
+        return await response.json();
+    }
+    
+    // 5. Обработка и отображение результата
+    function processAndDisplayResult(apiResult) {
+        // Значения по умолчанию
+        let sentiment = 'neutral';
+        let label = 'NEUTRAL';
+        let score = 0.5;
+        
+        try {
+            // Формат ответа: [[{label: "POSITIVE", score: 0.99}]]
+            if (Array.isArray(apiResult) && apiResult.length > 0) {
+                const firstResult = apiResult[0];
+                if (Array.isArray(firstResult) && firstResult.length > 0) {
+                    const data = firstResult[0];
+                    
+                    if (data && data.label && data.score) {
+                        label = data.label.toUpperCase();
+                        score = data.score;
+                        
+                        // Определить сентимент по правилам из задания
+                        if (label === 'POSITIVE' && score > 0.5) {
+                            sentiment = 'positive';
+                        } else if (label === 'NEGATIVE' && score > 0.5) {
+                            sentiment = 'negative';
+                        } else {
+                            sentiment = 'neutral';
+                            label = 'NEUTRAL';
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error processing result:', error);
+            // Оставить значения по умолчанию
+        }
+        
+        // Обновить UI
+        sentimentResult.className = `sentiment-result ${sentiment}`;
+        
+        // Выбрать иконку
+        let icon = 'fa-question-circle';
+        if (sentiment === 'positive') icon = 'fa-thumbs-up';
+        if (sentiment === 'negative') icon = 'fa-thumbs-down';
+        
+        // Форматировать процент уверенности
+        const confidence = (score * 100).toFixed(1);
+        
+        // Создать HTML
+        sentimentResult.innerHTML = `
+            <i class="fas ${icon} icon"></i>
+            <span>${label} (${confidence}% confidence)</span>
+        `;
+    }
+    
+    // 6. Показать ошибку
+    function showError(message) {
+        errorElement.textContent = message;
+        errorElement.style.display = 'block';
+        
+        // Автоматически скрыть через 5 секунд
+        setTimeout(hideError, 5000);
+    }
+    
+    // 7. Скрыть ошибку
+    function hideError() {
+        errorElement.style.display = 'none';
+    }
+    
+    // ========== ИНИЦИАЛИЗАЦИЯ ==========
+    
+    // Загрузить отзывы
     loadReviews();
     
-    // Set up event listeners
-    analyzeBtn.addEventListener("click", analyzeRandomReview);
-    apiTokenInput.addEventListener("input", saveApiToken);
-    
-    // Load saved API token from localStorage if exists
-    const savedToken = localStorage.getItem("hfApiToken");
+    // Загрузить сохраненный токен
+    const savedToken = localStorage.getItem('hfApiToken');
     if (savedToken) {
         apiTokenInput.value = savedToken;
         apiToken = savedToken;
-        console.log("Loaded saved API token");
     }
+    
+    // Назначить обработчики событий
+    analyzeBtn.addEventListener('click', analyzeRandomReview);
+    apiTokenInput.addEventListener('input', saveApiToken);
+    
+    console.log('App initialized successfully');
 });
-
-/**
- * Load and parse the TSV file using Papa Parse
- * File: reviews_test.tsv (should be in same directory)
- */
-function loadReviews() {
-    console.log("Loading reviews from TSV file...");
-    
-    fetch("reviews_test.tsv")
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error(`Failed to load TSV file: ${response.status} ${response.statusText}`);
-            }
-            return response.text();
-        })
-        .then((tsvData) => {
-            // Use Papa Parse to parse TSV data
-            Papa.parse(tsvData, {
-                header: true,
-                delimiter: "\t",
-                complete: function(results) {
-                    // Extract text column from parsed data
-                    if (results.data && results.data.length > 0) {
-                        reviews = results.data
-                            .map(row => row.text)
-                            .filter(text => typeof text === "string" && text.trim() !== "");
-                        
-                        console.log(`Successfully loaded ${reviews.length} reviews from TSV`);
-                    } else {
-                        showError("No review data found in TSV file. Please ensure the file contains a 'text' column.");
-                    }
-                },
-                error: function(error) {
-                    console.error("TSV parsing error:", error);
-                    showError(`Failed to parse TSV file: ${error.message}`);
-                }
-            });
-        })
-        .catch((error) => {
-            console.error("Error loading TSV file:", error);
-            showError(`Failed to load reviews: ${error.message}. Please ensure 'reviews_test.tsv' exists.`);
-        });
-}
-
-/**
- * Save API token to localStorage
- */
-function saveApiToken() {
-    apiToken = apiTokenInput.value.trim();
-    if (apiToken) {
-        localStorage.setItem("hfApiToken", apiToken);
-        console.log("API token saved to localStorage");
-    } else {
-        localStorage.removeItem("hfApiToken");
-        console.log("API token cleared from localStorage");
-    }
-}
-
-/**
- * Analyze a random review from the loaded TSV data
- */
-async function analyzeRandomReview() {
-    // Clear any previous errors
-    hideError();
-    
-    // Check if reviews are loaded
-    if (!Array.isArray(reviews) || reviews.length === 0) {
-        showError("No reviews available. Please wait for reviews to load or check TSV file.");
-        return;
-    }
-    
-    // Select a random review
-    const randomIndex = Math.floor(Math.random() * reviews.length);
-    const selectedReview = reviews[randomIndex];
-    
-    // Display the selected review
-    reviewText.textContent = selectedReview;
-    
-    // Show loading state
-    loadingElement.style.display = "block";
-    analyzeBtn.disabled = true;
-    sentimentResult.innerHTML = ""; // Clear previous result
-    sentimentResult.className = "sentiment-result"; // Reset classes
-    
-    try {
-        // Analyze sentiment using Hugging Face API
-        const result = await analyzeSentimentWithAPI(selectedReview);
-        
-        // Display the result
-        displaySentiment(result);
-    } catch (error) {
-        console.error("Error analyzing sentiment:", error);
-        showError(error.message || "Failed to analyze sentiment. Please check your API token and try again.");
-    } finally {
-        // Hide loading state
-        loadingElement.style.display = "none";
-        analyzeBtn.disabled = false;
-    }
-}
-
-/**
- * Call Hugging Face Inference API to analyze sentiment
- * @param {string} text - Review text to analyze
- * @returns {Promise<Array>} - Sentiment analysis results
- */
-async function analyzeSentimentWithAPI(text) {
-    // Prepare request headers
-    const headers = {
-        "Content-Type": "application/json"
-    };
-    
-    // Add Authorization header if token is provided
-    if (apiToken) {
-        headers["Authorization"] = `Bearer ${apiToken}`;
-    }
-    
-    // Prepare request body
-    const body = JSON.stringify({
-        inputs: text
-    });
-    
-    // Make API request
-    const response = await fetch(MODEL_URL, {
-        method: "POST",
-        headers: headers,
-        body: body
-    });
-    
-    // Check if request was successful
-    if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-        
-        // Try to parse error details
-        try {
-            const errorJson = JSON.parse(errorText);
-            if (errorJson.error) {
-                errorMessage = errorJson.error;
-            }
-        } catch (e) {
-            // If can't parse as JSON, use raw error text
-            if (errorText) {
-                errorMessage += ` - ${errorText}`;
-            }
-        }
-        
-        throw new Error(errorMessage);
-    }
-    
-    // Parse and return the response
-    return await response.json();
-}
-
-/**
- * Display sentiment result in the UI
- * @param {Array} apiResult - Result from Hugging Face API
- */
-function displaySentiment(apiResult) {
-    // Default values (neutral sentiment)
-    let sentiment = "neutral";
-    let score = 0.5;
-    let label = "NEUTRAL";
-    
-    // Parse the API response
-    // Expected format: [[{label: "POSITIVE", score: 0.99}, {label: "NEGATIVE", score: 0.01}]]
-    try {
-        if (Array.isArray(apiResult) && apiResult.length > 0) {
-            const sentimentArray = apiResult[0];
-            
-            if (Array.isArray(sentimentArray) && sentimentArray.length > 0) {
-                // Get the first (highest confidence) result
-                const sentimentData = sentimentArray[0];
-                
-                if (sentimentData && typeof sentimentData === "object") {
-                    label = sentimentData.label || "NEUTRAL";
-                    score = sentimentData.score || 0.5;
-                    
-                    // Determine sentiment based on rules from assignment
-                    if (label.toUpperCase() === "POSITIVE" && score > 0.5) {
-                        sentiment = "positive";
-                    } else if (label.toUpperCase() === "NEGATIVE" && score > 0.5) {
-                        sentiment = "negative";
-                    } else {
-                        sentiment = "neutral";
-                        label = "NEUTRAL";
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error("Error parsing API response:", error);
-        // Keep default neutral values
-    }
-    
-    // Update UI with sentiment result
-    sentimentResult.classList.add(sentiment);
-    
-    // Format confidence percentage
-    const confidencePercent = (score * 100).toFixed(1);
-    
-    // Get appropriate icon for sentiment
-    const iconClass = getSentimentIcon(sentiment);
-    
-    // Create result HTML
-    sentimentResult.innerHTML = `
-        <i class="fas ${iconClass} icon"></i>
-        <span>${label} (${confidencePercent}% confidence)</span>
-    `;
-}
-
-/**
- * Get Font Awesome icon class for sentiment
- * @param {string} sentiment - "positive", "negative", or "neutral"
- * @returns {string} - Icon class name
- */
-function getSentimentIcon(sentiment) {
-    switch (sentiment) {
-        case "positive":
-            return "fa-thumbs-up";
-        case "negative":
-            return "fa-thumbs-down";
-        default:
-            return "fa-question-circle";
-    }
-}
-
-/**
- * Show error message in UI
- * @param {string} message - Error message to display
- */
-function showError(message) {
-    errorElement.textContent = message;
-    errorElement.style.display = "block";
-    
-    // Auto-hide error after 5 seconds
-    setTimeout(hideError, 5000);
-}
-
-/**
- * Hide error message
- */
-function hideError() {
-    errorElement.style.display = "none";
-}
