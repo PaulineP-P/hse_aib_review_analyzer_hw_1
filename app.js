@@ -4,6 +4,7 @@
 // Глобальные переменные
 let reviews = [];
 let apiToken = '';
+let currentSelectedReview = ''; // Сохраняем текущий отзыв для логирования
 
 // DOM элементы
 const analyzeBtn = document.getElementById('analyze-btn');
@@ -16,6 +17,9 @@ const apiTokenInput = document.getElementById('api-token');
 
 // URL модели из задания
 const MODEL_URL = 'https://router.huggingface.co/hf-inference/models/j-hartmann/sentiment-roberta-large-english-3-classes';
+
+// URL Google Apps Script для логирования
+const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwrdYEcnoZdo7yUjrAfMixydOtt8HNcZKl6G19Yo7pBBdgRej24MRMQ7ppp6UsEUDdu0g/exec';
 
 // Инициализация приложения
 function initApp() {
@@ -32,6 +36,7 @@ function initApp() {
     loadSavedToken();
     
     console.log('App initialized');
+    console.log('Google Sheets URL:', GOOGLE_SHEETS_URL);
 }
 
 // Загрузка отзывов из TSV
@@ -130,10 +135,10 @@ async function analyzeRandomReview() {
     
     // Выбираем случайный отзыв
     const randomIndex = Math.floor(Math.random() * reviews.length);
-    const selectedReview = reviews[randomIndex];
+    currentSelectedReview = reviews[randomIndex]; // Сохраняем для логирования
     
     // Показываем отзыв
-    reviewText.textContent = selectedReview;
+    reviewText.textContent = currentSelectedReview;
     
     // Показываем индикатор загрузки
     loadingText.textContent = 'Sending request to Hugging Face API...';
@@ -146,10 +151,10 @@ async function analyzeRandomReview() {
     
     try {
         // Отправляем запрос к API
-        const result = await callHuggingFaceAPI(selectedReview);
+        const result = await callHuggingFaceAPI(currentSelectedReview);
         
         // Обрабатываем и показываем результат
-        processAndDisplayResult(result);
+        processAndDisplayResult(result, currentSelectedReview);
         
     } catch (error) {
         console.error('Analysis error:', error);
@@ -209,7 +214,7 @@ async function callHuggingFaceAPI(text) {
 }
 
 // Обработка и отображение результата
-function processAndDisplayResult(apiResult) {
+function processAndDisplayResult(apiResult, reviewText) {
     // Значения по умолчанию (нейтральный)
     let sentiment = 'neutral';
     let label = 'NEUTRAL';
@@ -246,6 +251,16 @@ function processAndDisplayResult(apiResult) {
     
     // Обновляем UI
     updateSentimentDisplay(sentiment, label, score);
+    
+    // ⬇️ ВАЖНО: Вызываем логирование ПОСЛЕ отображения результата ⬇️
+    logToGoogleSheets({
+        review: reviewText,
+        sentiment: sentiment,
+        label: label,
+        score: score,
+        confidence: (score * 100).toFixed(1),
+        rawApiResult: apiResult
+    });
 }
 
 // Обновление отображения сентимента
@@ -266,6 +281,54 @@ function updateSentimentDisplay(sentiment, label, score) {
         <i class="fas ${icon} icon"></i>
         <span>${label} (${confidence}% confidence)</span>
     `;
+}
+
+// Функция для логирования в Google Sheets
+async function logToGoogleSheets(data) {
+    console.log('📤 Подготовка данных для Google Sheets...');
+    
+    const payload = {
+        ts_iso: new Date().toISOString(),
+        review: data.review,
+        sentiment: `${data.label} (${data.confidence}% confidence)`,
+        meta: {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            language: navigator.language,
+            screenSize: `${window.innerWidth}x${window.innerHeight}`,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            model: 'j-hartmann/sentiment-roberta-large-english-3-classes',
+            rawScore: data.score,
+            sentimentCategory: data.sentiment,
+            timestampClient: Date.now(),
+            // Сохраняем структурированные данные из API
+            apiResponse: Array.isArray(data.rawApiResult) ? 
+                JSON.stringify(data.rawApiResult[0]) : 
+                JSON.stringify(data.rawApiResult)
+        }
+    };
+    
+    console.log('Отправляемые данные:', payload);
+    
+    try {
+        // Отправляем POST-запрос с режимом no-cors для обхода CORS
+        await fetch(GOOGLE_SHEETS_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Важно для работы с разными доменами
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        console.log('✅ Данные отправлены в Google Sheets');
+        console.log('Можете проверить таблицу: https://docs.google.com/spreadsheets/d/1cWlMGxCWeqnmpPeivlnBmP2nbW4MJOhjjpHceBvTlhc/edit');
+        
+    } catch (error) {
+        // В режиме no-cors мы не получим ответ, поэтому это нормально
+        console.log('📝 Логирование завершено (режим no-cors)');
+        console.log('Данные должны быть в таблице, проверьте через 10 секунд');
+    }
 }
 
 // Показать сообщение об ошибке
