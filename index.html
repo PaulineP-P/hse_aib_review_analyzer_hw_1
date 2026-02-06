@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Review Sentiment Analyzer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -74,6 +75,7 @@
             font-size: 16px;
             transition: border-color 0.3s;
             width: 100%;
+            font-family: monospace;
         }
         
         #api-token:focus {
@@ -124,6 +126,9 @@
             font-size: 16px;
             color: #444;
             min-height: 60px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
         }
         
         .sentiment-result {
@@ -139,6 +144,7 @@
             font-size: 18px;
             min-height: 60px;
             text-align: center;
+            flex-wrap: wrap;
         }
         
         .positive {
@@ -237,19 +243,20 @@
 </head>
 <body>
     <div class="container">
-        <h1>Review Sentiment Analyzer</h1>
-        <p class="description">Analyze the sentiment of product reviews using Transformers.js (runs 100% in your browser)</p>
+        <h1><i class="fas fa-robot"></i> Review Sentiment Analyzer</h1>
+        <p class="description">Analyze the sentiment of product reviews using Hugging Face AI model</p>
         
         <div class="api-section">
-            <h2><i class="fas fa-brain"></i> Local AI Model Setup</h2>
+            <h2><i class="fas fa-key"></i> Hugging Face API Setup</h2>
             <div class="api-input">
-                <p><strong>No API token needed!</strong> The AI model runs directly in your browser.</p>
-                <p><small>The model will download automatically when you first use the app (≈100MB).</small></p>
+                <label for="api-token">Enter your Hugging Face API Token:</label>
+                <input type="text" id="api-token" placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                <p><small><i class="fas fa-info-circle"></i> Your token is stored only in your browser and is never sent to our servers.</small></p>
             </div>
         </div>
         
         <div class="review-section">
-            <button id="analyze-btn">Analyze Random Review</button>
+            <button id="analyze-btn"><i class="fas fa-magic"></i> Analyze Random Review</button>
             
             <div class="loading">
                 <div class="spinner"></div>
@@ -259,7 +266,7 @@
             <div class="error" id="error-message"></div>
             
             <div class="review-card">
-                <h3>Selected Review:</h3>
+                <h3><i class="fas fa-comment"></i> Selected Review:</h3>
                 <p class="review-text" id="review-text">Click the button above to analyze a random review</p>
             </div>
             
@@ -270,26 +277,21 @@
         </div>
         
         <div class="instructions">
-            <h3>How it works:</h3>
+            <h3><i class="fas fa-graduation-cap"></i> How to get a Hugging Face API Token:</h3>
             <ol>
-                <li>Click "Analyze Random Review"</li>
-                <li>The AI model will load (first time only, takes about 30 seconds)</li>
-                <li>Sentiment analysis happens 100% in your browser</li>
-                <li>No data is sent to any server - your privacy is protected</li>
+                <li>Go to <a href="https://huggingface.co/" target="_blank">huggingface.co</a> and create a free account</li>
+                <li>Navigate to your profile settings → Access Tokens</li>
+                <li>Generate a new token with <strong>read permissions</strong></li>
+                <li>Copy the token (starts with "hf_") and paste it above</li>
+                <li>Click "Analyze Random Review" to test it</li>
             </ol>
         </div>
     </div>
     
     <footer>
-        <p>Powered by Transformers.js | Model: distilbert-base-uncased-finetuned-sst-2-english</p>
+        <p>Using model: siebert/sentiment-roberta-large-english</p>
     </footer>
 
-    <!-- Papa Parse для TSV -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    
-    <!-- Transformers.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js"></script>
-    
     <!-- Наш JavaScript -->
     <script src="app.js"></script>
 </body>
