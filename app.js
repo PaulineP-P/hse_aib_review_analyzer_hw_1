@@ -15,7 +15,7 @@ const errorElement = document.getElementById('error-message');
 const apiTokenInput = document.getElementById('api-token');
 
 // URL модели из задания
-const MODEL_URL = 'https://api-inference.huggingface.co/models/siebert/sentiment-roberta-large-english';
+const MODEL_URL = 'https://router.huggingface.co/models/j-hartmann/sentiment-roberta-large-english-3-classes';
 
 // Инициализация приложения
 function initApp() {
