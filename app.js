@@ -149,7 +149,7 @@ function determineBusinessAction(confidence, label) {
         // Кейс: риск потери клиента
         return {
             actionCode: "OFFER_COUPON",
-            uiMessage: "🚨 Мы приносим извинения. Пожалуйста, примите купон на скидку 50% на следующую покупку!",
+            uiMessage: "🚨 We're sorry. Please accept this 50% discount coupon for your next purchase!",
             uiColor: "#ef4444", // Красный
             icon: "fa-ticket"
         };
@@ -157,7 +157,7 @@ function determineBusinessAction(confidence, label) {
         // Кейс: неопределенно / нейтрально
         return {
             actionCode: "REQUEST_FEEDBACK",
-            uiMessage: "📝 Спасибо за отзыв! Расскажите подробнее, что мы можем улучшить?",
+            uiMessage: "📝 Thank you for your feedback! Could you tell us more about how we can improve?",
             uiColor: "#6b7280", // Серый
             icon: "fa-clipboard-list"
         };
@@ -165,7 +165,7 @@ function determineBusinessAction(confidence, label) {
         // Кейс: довольный клиент
         return {
             actionCode: "ASK_REFERRAL",
-            uiMessage: "⭐ Рады, что вам понравилось! Порекомендуйте нас друзьям и получите бонусы.",
+            uiMessage: "⭐ Glad you liked it! Refer a friend and earn rewards.",
             uiColor: "#3b82f6", // Синий
             icon: "fa-share-alt"
         };
@@ -312,15 +312,14 @@ async function processAndDisplayResult(apiResult, reviewText) {
     // Отображаем бизнес-действие в UI
     updateActionDisplay(decision);
     
-    // ⭐ ИСПРАВЛЕНО: Правильная структура данных для Google Sheets
+    // Логирование в Google Sheets с правильной структурой
     await logToGoogleSheets({
         review: reviewText,
         sentiment: sentiment,
         label: label,
         score: score,
         confidence: (score * 100).toFixed(1),
-        actionTaken: decision.actionCode, // OFFER_COUPON, REQUEST_FEEDBACK или ASK_REFERRAL
-        actionMessage: decision.uiMessage,
+        actionTaken: decision.actionCode, // Только код действия
         rawApiResult: apiResult
     });
 }
@@ -365,17 +364,17 @@ function updateActionDisplay(decision) {
     `;
 }
 
-// ⭐ ИСПРАВЛЕНО: Функция логирования с правильной структурой
+// Функция логирования с правильной структурой
 async function logToGoogleSheets(data) {
-    console.log('📤 Подготовка данных для Google Sheets...');
+    console.log('📤 Preparing data for Google Sheets...');
     
     // Правильная структура payload: каждая колонка на своем месте
     const payload = {
-        ts_iso: new Date().toISOString(),                    // Колонка A: Timestamp
-        review: data.review,                                  // Колонка B: Review
-        sentiment: `${data.label} (${data.confidence}% confidence)`, // Колонка C: Sentiment
-        action_taken: data.actionTaken,                       // ⭐ Колонка D: ТОЛЬКО КОД ДЕЙСТВИЯ (OFFER_COUPON и т.д.)
-        meta: {                                                // ⭐ Колонка E: ВЕСЬ JSON ОБЪЕКТ ЗДЕСЬ
+        ts_iso: new Date().toISOString(),                    // Column A: Timestamp
+        review: data.review,                                  // Column B: Review
+        sentiment: `${data.label} (${data.confidence}% confidence)`, // Column C: Sentiment
+        action_taken: data.actionTaken,                       // ⭐ Column D: ONLY ACTION CODE (OFFER_COUPON, etc.)
+        meta: {                                                // ⭐ Column E: ALL TECHNICAL DATA HERE
             userAgent: navigator.userAgent,
             platform: navigator.platform,
             language: navigator.language,
@@ -384,7 +383,6 @@ async function logToGoogleSheets(data) {
             model: 'j-hartmann/sentiment-roberta-large-english-3-classes',
             rawScore: data.score,
             sentimentCategory: data.sentiment,
-            actionMessage: data.actionMessage,
             timestampClient: Date.now(),
             apiResponse: Array.isArray(data.rawApiResult) ? 
                 JSON.stringify(data.rawApiResult[0]) : 
@@ -392,16 +390,15 @@ async function logToGoogleSheets(data) {
         }
     };
     
-    console.log('Отправляемые данные:', {
+    console.log('Sending data:', {
         ts_iso: payload.ts_iso,
-        review: payload.review.substring(0, 50) + '...', // Обрезаем для лога
+        review: payload.review.substring(0, 50) + '...',
         sentiment: payload.sentiment,
-        action_taken: payload.action_taken, // Должно быть просто "OFFER_COUPON" и т.д.
-        meta: '...' // Мета-объект есть, но не показываем полностью в логе
+        action_taken: payload.action_taken, // Should be just "OFFER_COUPON", etc.
+        meta: '✓ (object present)'
     });
     
     try {
-        // Отправляем POST-запрос с режимом no-cors для обхода CORS
         await fetch(GOOGLE_SHEETS_URL, {
             method: 'POST',
             mode: 'no-cors',
@@ -411,11 +408,11 @@ async function logToGoogleSheets(data) {
             body: JSON.stringify(payload)
         });
         
-        console.log('✅ Данные отправлены в Google Sheets');
-        console.log('action_taken =', payload.action_taken); // Проверяем значение
+        console.log('✅ Data sent to Google Sheets');
+        console.log('action_taken =', payload.action_taken);
         
     } catch (error) {
-        console.log('📝 Логирование завершено (режим no-cors)');
+        console.log('📝 Logging completed (no-cors mode)');
     }
 }
 
