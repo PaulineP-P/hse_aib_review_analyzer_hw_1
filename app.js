@@ -20,7 +20,7 @@ const apiTokenInput = document.getElementById('api-token');
 const MODEL_URL = 'https://router.huggingface.co/hf-inference/models/j-hartmann/sentiment-roberta-large-english-3-classes';
 
 // Google Apps Script URL - YOUR WORKING URL
-const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwrdYEcnoZdo7yUjrAfMixydOtt8HNcZKl6G19Yo7pBBdgRej24MRMQ7ppp6UsEUDdu0g/exec';
+const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbw9va2vnZk8WbGma45XjWePdXqtRy9wiJxqBElCnwM8Ttg_6hPqvZ7UI7ZjOVX3B4AfFw/exec';
 
 // Initialize app
 function initApp() {
