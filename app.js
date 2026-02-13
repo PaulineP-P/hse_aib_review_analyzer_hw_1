@@ -306,21 +306,21 @@ async function processAndDisplayResult(apiResult, reviewText) {
     // Обновляем UI с тональностью
     updateSentimentDisplay(sentiment, label, score);
     
-    // ⭐ НОВОЕ: Определяем бизнес-действие на основе результатов анализа
+    // Определяем бизнес-действие на основе результатов анализа
     const decision = determineBusinessAction(score, label);
     
-    // ⭐ НОВОЕ: Отображаем бизнес-действие в UI
+    // Отображаем бизнес-действие в UI
     updateActionDisplay(decision);
     
-    // ⬇️ Логирование в Google Sheets с новым полем action_taken
+    // ⭐ ИСПРАВЛЕНО: Правильная структура данных для Google Sheets
     await logToGoogleSheets({
         review: reviewText,
         sentiment: sentiment,
         label: label,
         score: score,
         confidence: (score * 100).toFixed(1),
-        actionTaken: decision.actionCode, // НОВОЕ: добавляем действие
-        actionMessage: decision.uiMessage, // Для отладки
+        actionTaken: decision.actionCode, // OFFER_COUPON, REQUEST_FEEDBACK или ASK_REFERRAL
+        actionMessage: decision.uiMessage,
         rawApiResult: apiResult
     });
 }
@@ -345,7 +345,7 @@ function updateSentimentDisplay(sentiment, label, score) {
     `;
 }
 
-// ⭐ НОВОЕ: Обновление отображения бизнес-действия
+// Обновление отображения бизнес-действия
 function updateActionDisplay(decision) {
     if (!actionResult) return;
     
@@ -365,16 +365,17 @@ function updateActionDisplay(decision) {
     `;
 }
 
-// Функция для логирования в Google Sheets (обновленная)
+// ⭐ ИСПРАВЛЕНО: Функция логирования с правильной структурой
 async function logToGoogleSheets(data) {
     console.log('📤 Подготовка данных для Google Sheets...');
     
+    // Правильная структура payload: каждая колонка на своем месте
     const payload = {
-        ts_iso: new Date().toISOString(),
-        review: data.review,
-        sentiment: `${data.label} (${data.confidence}% confidence)`,
-        action_taken: data.actionTaken, // ⭐ НОВОЕ: добавляем action_taken
-        meta: {
+        ts_iso: new Date().toISOString(),                    // Колонка A: Timestamp
+        review: data.review,                                  // Колонка B: Review
+        sentiment: `${data.label} (${data.confidence}% confidence)`, // Колонка C: Sentiment
+        action_taken: data.actionTaken,                       // ⭐ Колонка D: ТОЛЬКО КОД ДЕЙСТВИЯ (OFFER_COUPON и т.д.)
+        meta: {                                                // ⭐ Колонка E: ВЕСЬ JSON ОБЪЕКТ ЗДЕСЬ
             userAgent: navigator.userAgent,
             platform: navigator.platform,
             language: navigator.language,
@@ -385,20 +386,25 @@ async function logToGoogleSheets(data) {
             sentimentCategory: data.sentiment,
             actionMessage: data.actionMessage,
             timestampClient: Date.now(),
-            // Сохраняем структурированные данные из API
             apiResponse: Array.isArray(data.rawApiResult) ? 
                 JSON.stringify(data.rawApiResult[0]) : 
                 JSON.stringify(data.rawApiResult)
         }
     };
     
-    console.log('Отправляемые данные (с action_taken):', payload);
+    console.log('Отправляемые данные:', {
+        ts_iso: payload.ts_iso,
+        review: payload.review.substring(0, 50) + '...', // Обрезаем для лога
+        sentiment: payload.sentiment,
+        action_taken: payload.action_taken, // Должно быть просто "OFFER_COUPON" и т.д.
+        meta: '...' // Мета-объект есть, но не показываем полностью в логе
+    });
     
     try {
         // Отправляем POST-запрос с режимом no-cors для обхода CORS
         await fetch(GOOGLE_SHEETS_URL, {
             method: 'POST',
-            mode: 'no-cors', // Важно для работы с разными доменами
+            mode: 'no-cors',
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -406,12 +412,10 @@ async function logToGoogleSheets(data) {
         });
         
         console.log('✅ Данные отправлены в Google Sheets');
-        console.log('Можете проверить таблицу: https://docs.google.com/spreadsheets/d/1cWlMGxCWeqnmpPeivlnBmP2nbW4MJOhjjpHceBvTlhc/edit');
+        console.log('action_taken =', payload.action_taken); // Проверяем значение
         
     } catch (error) {
-        // В режиме no-cors мы не получим ответ, поэтому это нормально
         console.log('📝 Логирование завершено (режим no-cors)');
-        console.log('Данные должны быть в таблице, проверьте через 10 секунд');
     }
 }
 
