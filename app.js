@@ -1,4 +1,4 @@
-// Review Sentiment Analyzer
+// Review Sentiment Analyzer with Business Actions
 // Использует Hugging Face Inference API
 
 // Глобальные переменные
@@ -10,6 +10,7 @@ let currentSelectedReview = ''; // Сохраняем текущий отзыв 
 const analyzeBtn = document.getElementById('analyze-btn');
 const reviewText = document.getElementById('review-text');
 const sentimentResult = document.getElementById('sentiment-result');
+const actionResult = document.getElementById('action-result');
 const loadingElement = document.querySelector('.loading');
 const loadingText = document.getElementById('loading-text');
 const errorElement = document.getElementById('error-message');
@@ -23,7 +24,7 @@ const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwrdYEcnoZdo7
 
 // Инициализация приложения
 function initApp() {
-    console.log('Initializing Sentiment Analyzer...');
+    console.log('Initializing Sentiment Analyzer with Business Logic...');
     
     // Загружаем отзывы
     loadReviews();
@@ -122,10 +123,63 @@ function loadSavedToken() {
     }
 }
 
+/**
+ * Определяет бизнес-действие на основе анализа тональности
+ * 
+ * @param {number} confidence - Уверенность модели (0.0 to 1.0)
+ * @param {string} label - Метка ("POSITIVE", "NEGATIVE")
+ * @returns {object} Объект с метаданными действия
+ */
+function determineBusinessAction(confidence, label) {
+    console.log(`Determining action for label: ${label}, confidence: ${confidence}`);
+    
+    // 1. Нормализуем оценку в шкалу от 0 (плохо) до 1 (хорошо)
+    let normalizedScore = 0.5; // По умолчанию нейтрально
+
+    if (label === "POSITIVE") {
+        normalizedScore = confidence; // POSITIVE с высокой уверенностью = хорошо
+    } else if (label === "NEGATIVE") {
+        normalizedScore = 1.0 - confidence; // NEGATIVE с высокой уверенностью = плохо
+    }
+
+    console.log(`Normalized score: ${normalizedScore.toFixed(2)}`);
+
+    // 2. Применяем бизнес-правила
+    if (normalizedScore <= 0.4) {
+        // Кейс: риск потери клиента
+        return {
+            actionCode: "OFFER_COUPON",
+            uiMessage: "🚨 Мы приносим извинения. Пожалуйста, примите купон на скидку 50% на следующую покупку!",
+            uiColor: "#ef4444", // Красный
+            icon: "fa-ticket"
+        };
+    } else if (normalizedScore < 0.7) {
+        // Кейс: неопределенно / нейтрально
+        return {
+            actionCode: "REQUEST_FEEDBACK",
+            uiMessage: "📝 Спасибо за отзыв! Расскажите подробнее, что мы можем улучшить?",
+            uiColor: "#6b7280", // Серый
+            icon: "fa-clipboard-list"
+        };
+    } else {
+        // Кейс: довольный клиент
+        return {
+            actionCode: "ASK_REFERRAL",
+            uiMessage: "⭐ Рады, что вам понравилось! Порекомендуйте нас друзьям и получите бонусы.",
+            uiColor: "#3b82f6", // Синий
+            icon: "fa-share-alt"
+        };
+    }
+}
+
 // Анализ случайного отзыва
 async function analyzeRandomReview() {
-    // Скрываем предыдущие ошибки
+    // Скрываем предыдущие ошибки и результаты действий
     hideError();
+    if (actionResult) {
+        actionResult.style.display = 'none';
+        actionResult.innerHTML = '';
+    }
     
     // Проверяем наличие отзывов
     if (reviews.length === 0) {
@@ -154,7 +208,7 @@ async function analyzeRandomReview() {
         const result = await callHuggingFaceAPI(currentSelectedReview);
         
         // Обрабатываем и показываем результат
-        processAndDisplayResult(result, currentSelectedReview);
+        await processAndDisplayResult(result, currentSelectedReview);
         
     } catch (error) {
         console.error('Analysis error:', error);
@@ -214,7 +268,7 @@ async function callHuggingFaceAPI(text) {
 }
 
 // Обработка и отображение результата
-function processAndDisplayResult(apiResult, reviewText) {
+async function processAndDisplayResult(apiResult, reviewText) {
     // Значения по умолчанию (нейтральный)
     let sentiment = 'neutral';
     let label = 'NEUTRAL';
@@ -249,16 +303,24 @@ function processAndDisplayResult(apiResult, reviewText) {
         showError('Could not parse API response. Using default neutral sentiment.');
     }
     
-    // Обновляем UI
+    // Обновляем UI с тональностью
     updateSentimentDisplay(sentiment, label, score);
     
-    // ⬇️ ВАЖНО: Вызываем логирование ПОСЛЕ отображения результата ⬇️
-    logToGoogleSheets({
+    // ⭐ НОВОЕ: Определяем бизнес-действие на основе результатов анализа
+    const decision = determineBusinessAction(score, label);
+    
+    // ⭐ НОВОЕ: Отображаем бизнес-действие в UI
+    updateActionDisplay(decision);
+    
+    // ⬇️ Логирование в Google Sheets с новым полем action_taken
+    await logToGoogleSheets({
         review: reviewText,
         sentiment: sentiment,
         label: label,
         score: score,
         confidence: (score * 100).toFixed(1),
+        actionTaken: decision.actionCode, // НОВОЕ: добавляем действие
+        actionMessage: decision.uiMessage, // Для отладки
         rawApiResult: apiResult
     });
 }
@@ -283,7 +345,27 @@ function updateSentimentDisplay(sentiment, label, score) {
     `;
 }
 
-// Функция для логирования в Google Sheets
+// ⭐ НОВОЕ: Обновление отображения бизнес-действия
+function updateActionDisplay(decision) {
+    if (!actionResult) return;
+    
+    actionResult.style.display = 'block';
+    actionResult.className = 'action-result';
+    actionResult.style.borderLeftColor = decision.uiColor;
+    actionResult.style.backgroundColor = `${decision.uiColor}15`; // 15% прозрачности
+    
+    actionResult.innerHTML = `
+        <div class="action-icon">
+            <i class="fas ${decision.icon}" style="color: ${decision.uiColor}"></i>
+        </div>
+        <div class="action-content">
+            <div class="action-code">${decision.actionCode}</div>
+            <div class="action-message">${decision.uiMessage}</div>
+        </div>
+    `;
+}
+
+// Функция для логирования в Google Sheets (обновленная)
 async function logToGoogleSheets(data) {
     console.log('📤 Подготовка данных для Google Sheets...');
     
@@ -291,6 +373,7 @@ async function logToGoogleSheets(data) {
         ts_iso: new Date().toISOString(),
         review: data.review,
         sentiment: `${data.label} (${data.confidence}% confidence)`,
+        action_taken: data.actionTaken, // ⭐ НОВОЕ: добавляем action_taken
         meta: {
             userAgent: navigator.userAgent,
             platform: navigator.platform,
@@ -300,6 +383,7 @@ async function logToGoogleSheets(data) {
             model: 'j-hartmann/sentiment-roberta-large-english-3-classes',
             rawScore: data.score,
             sentimentCategory: data.sentiment,
+            actionMessage: data.actionMessage,
             timestampClient: Date.now(),
             // Сохраняем структурированные данные из API
             apiResponse: Array.isArray(data.rawApiResult) ? 
@@ -308,7 +392,7 @@ async function logToGoogleSheets(data) {
         }
     };
     
-    console.log('Отправляемые данные:', payload);
+    console.log('Отправляемые данные (с action_taken):', payload);
     
     try {
         // Отправляем POST-запрос с режимом no-cors для обхода CORS
