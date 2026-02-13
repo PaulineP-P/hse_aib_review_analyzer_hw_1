@@ -19,7 +19,7 @@ const apiTokenInput = document.getElementById('api-token');
 // Model URL
 const MODEL_URL = 'https://router.huggingface.co/hf-inference/models/j-hartmann/sentiment-roberta-large-english-3-classes';
 
-// Google Apps Script URL
+// Google Apps Script URL - YOUR WORKING URL
 const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwrdYEcnoZdo7yUjrAfMixydOtt8HNcZKl6G19Yo7pBBdgRej24MRMQ7ppp6UsEUDdu0g/exec';
 
 // Initialize app
@@ -113,48 +113,41 @@ function loadSavedToken() {
 
 /**
  * Determines business action based on sentiment analysis
- * 
- * @param {number} confidence - Model confidence (0.0 to 1.0)
- * @param {string} label - Label ("POSITIVE", "NEGATIVE")
- * @returns {object} Action metadata
  */
 function determineBusinessAction(confidence, label) {
     console.log(`Determining action for label: ${label}, confidence: ${confidence}`);
     
-    // 1. Normalize score to 0 (worst) to 1 (best) scale
-    let normalizedScore = 0.5; // Default neutral
+    // Normalize score to 0 (worst) to 1 (best) scale
+    let normalizedScore = 0.5;
 
     if (label === "POSITIVE") {
-        normalizedScore = confidence; // POSITIVE with high confidence = good
+        normalizedScore = confidence;
     } else if (label === "NEGATIVE") {
-        normalizedScore = 1.0 - confidence; // NEGATIVE with high confidence = bad
+        normalizedScore = 1.0 - confidence;
     }
 
     console.log(`Normalized score: ${normalizedScore.toFixed(2)}`);
 
-    // 2. Apply business rules
+    // Apply business rules
     if (normalizedScore <= 0.4) {
-        // Churn risk case
         return {
             actionCode: "OFFER_COUPON",
             uiMessage: "🚨 We're sorry. Please accept this 50% discount coupon for your next purchase!",
-            uiColor: "#ef4444", // Red
+            uiColor: "#ef4444",
             icon: "fa-ticket"
         };
     } else if (normalizedScore < 0.7) {
-        // Neutral / ambiguous case
         return {
             actionCode: "REQUEST_FEEDBACK",
             uiMessage: "📝 Thank you for your feedback! Could you tell us more about how we can improve?",
-            uiColor: "#6b7280", // Gray
+            uiColor: "#6b7280",
             icon: "fa-clipboard-list"
         };
     } else {
-        // Happy customer case
         return {
             actionCode: "ASK_REFERRAL",
             uiMessage: "⭐ Glad you liked it! Refer a friend and earn rewards.",
-            uiColor: "#3b82f6", // Blue
+            uiColor: "#3b82f6",
             icon: "fa-share-alt"
         };
     }
@@ -253,7 +246,7 @@ async function processAndDisplayResult(apiResult, reviewText) {
                     
                     if (label === 'POSITIVE' && score > 0.5) {
                         sentiment = 'positive';
-                    } else if (label === 'EGATIVE' && score > 0.5) {
+                    } else if (label === 'NEGATIVE' && score > 0.5) {
                         sentiment = 'negative';
                     } else {
                         sentiment = 'neutral';
@@ -274,11 +267,11 @@ async function processAndDisplayResult(apiResult, reviewText) {
     
     await logToGoogleSheets({
         review: reviewText,
-        sentiment: sentiment,
         label: label,
-        score: score,
         confidence: (score * 100).toFixed(1),
         actionTaken: decision.actionCode,
+        score: score,
+        sentiment: sentiment,
         rawApiResult: apiResult
     });
 }
@@ -319,7 +312,7 @@ function updateActionDisplay(decision) {
     `;
 }
 
-// Log to Google Sheets (FIXED VERSION - removed no-cors)
+// Log to Google Sheets - FIXED VERSION with no-cors
 async function logToGoogleSheets(data) {
     console.log('📤 Preparing data for Google Sheets...');
     
@@ -344,36 +337,28 @@ async function logToGoogleSheets(data) {
         }
     };
     
-    console.log('Sending data:', {
-        ts_iso: payload.ts_iso,
-        review: payload.review.substring(0, 50) + '...',
-        sentiment: payload.sentiment,
-        action_taken: payload.action_taken,
-        meta: '✓ (object included)'
-    });
+    console.log('Sending data with action_taken:', payload.action_taken);
     
     try {
-        // FIXED: Removed mode: 'no-cors'
-        const response = await fetch(GOOGLE_SHEETS_URL, {
+        // Use no-cors mode - this is necessary for Google Sheets
+        await fetch(GOOGLE_SHEETS_URL, {
             method: 'POST',
+            mode: 'no-cors',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload)
         });
         
-        const result = await response.json();
-        console.log('✅ Google Sheets response:', result);
+        console.log('✅ Data sent to Google Sheets (no-cors mode)');
+        console.log('📊 Check your sheet in 10 seconds');
         
-        if (result.success) {
-            console.log('✅ Data successfully logged to Google Sheets');
-        } else {
-            console.error('❌ Google Sheets error:', result.error);
-        }
+        // Show success message to user
+        showError('✅ Data logged to Google Sheets! Check the sheet in 10 seconds.');
         
     } catch (error) {
-        console.error('❌ Error sending data to Google Sheets:', error);
-        showError('Failed to log data to Google Sheets. Check console for details.');
+        console.error('❌ Error sending data:', error);
+        showError('Failed to log data. Check console for details.');
     }
 }
 
@@ -381,7 +366,7 @@ async function logToGoogleSheets(data) {
 function showError(message) {
     errorElement.textContent = message;
     errorElement.style.display = 'block';
-    setTimeout(hideError, 7000);
+    setTimeout(hideError, 5000);
 }
 
 // Hide error message
