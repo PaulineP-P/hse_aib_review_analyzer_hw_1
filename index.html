@@ -16,11 +16,11 @@
         
         body {
             background: linear-gradient(135deg, 
-                #0ea5e9 0%,      /* Неоновый голубой */
-                #06b6d4 25%,     /* Яркий циан */
-                #8b5cf6 50%,     /* Фиолетовый */
-                #ec4899 75%,     /* Розовый */
-                #f43f5e 100%     /* Ярко-розовый */
+                #0ea5e9 0%,
+                #06b6d4 25%,
+                #8b5cf6 50%,
+                #ec4899 75%,
+                #f43f5e 100%
             );
             color: #111827;
             min-height: 100vh;
@@ -43,8 +43,8 @@
             border-radius: 20px;
             box-shadow: 
                 0 10px 30px rgba(0, 0, 0, 0.3),
-                0 0 40px rgba(236, 72, 153, 0.2),  /* Розовая неоновая тень */
-                0 0 60px rgba(14, 165, 233, 0.1);  /* Голубая неоновая тень */
+                0 0 40px rgba(236, 72, 153, 0.2),
+                0 0 60px rgba(14, 165, 233, 0.1);
             width: 90%;
             max-width: 800px;
             padding: 35px;
@@ -117,9 +117,9 @@
         
         #analyze-btn {
             background: linear-gradient(90deg, 
-                #ec4899 0%,      /* Розовый */
-                #8b5cf6 50%,     /* Фиолетовый */
-                #0ea5e9 100%     /* Голубой */
+                #ec4899 0%,
+                #8b5cf6 50%,
+                #0ea5e9 100%
             );
             color: white;
             border: none;
@@ -215,7 +215,6 @@
                 0 0 0 2px rgba(255, 255, 255, 0.3);
         }
         
-        /* Стили для блока с бизнес-действием */
         .action-result {
             display: none;
             margin-top: 25px;
@@ -425,7 +424,6 @@
             }
         }
         
-        /* Анимация появления */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -435,12 +433,10 @@
             animation: fadeIn 0.8s ease-out;
         }
         
-        /* Неоновый эффект при наведении на карточки */
         .api-section:hover, .review-card:hover, .instructions:hover {
             box-shadow: 0 0 25px rgba(236, 72, 153, 0.3);
         }
         
-        /* Дополнительные стили для action-result при наведении */
         .action-result:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
@@ -482,9 +478,8 @@
                 <span>Sentiment will appear here</span>
             </div>
             
-            <!-- Блок для отображения бизнес-действия -->
             <div class="action-result" id="action-result">
-                <!-- Будет заполнен динамически -->
+                <!-- Will be filled dynamically -->
             </div>
         </div>
         
@@ -499,7 +494,7 @@
                         <li><span style="color: #3b82f6;">🔵 Positive (0.7-1.0)</span> → ASK_REFERRAL</li>
                     </ul>
                 </li>
-                <li><strong>Action:</strong> Shows appropriate message with button</li>
+                <li><strong>Action:</strong> Shows appropriate message</li>
                 <li><strong>Logging:</strong> Saves <code>action_taken</code> column to Google Sheets</li>
             </ol>
         </div>
@@ -509,7 +504,6 @@
         <p><i class="fas fa-robot"></i> AI-Driven Decision System | Model: j-hartmann/sentiment-roberta-large-english-3-classes</p>
     </footer>
 
-    <!-- Наш JavaScript -->
     <script src="app.js"></script>
 </body>
 </html>
